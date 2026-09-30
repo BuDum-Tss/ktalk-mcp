@@ -1,37 +1,37 @@
 # ktalk-mcp-apikey
 
-MCP-сервер для Контур.Толк (ktalk.ru): записи, транскрипты, саммари — через
-официальный публичный API Толка с авторизацией по API-ключу (`X-Auth-Token`),
-без браузерного session-токена.
+MCP-сервер для Контур.Толк (ktalk.ru): записи, транскрипты, саммари, история
+встреч, чат — с двумя взаимозаменяемыми режимами авторизации.
 
-Основан на официальной OpenAPI-спецификации Толка (endpoints для
-`/api/recordings/*` и `/api/Domain/recordings*`) — session-token-инструменты
-вроде [mdemyanov/ktalk-cli](https://github.com/mdemyanov/ktalk-cli) и
-[mainpart/ktalk-mcp](https://github.com/mainpart/ktalk-mcp) используют
-внутренний недокументированный контур и не подходят, если у вас именно
-API-ключ, а не сессия браузера.
+## Два режима авторизации
+
+| | `session` (рекомендуется) | `api_key` |
+|---|---|---|
+| Что это | Токен вашей браузерной сессии Толка | Личный или доменный API-ключ (`X-Auth-Token`) |
+| Ограничения по scope | Нет — видит всё, что видите вы сами в интерфейсе | Личный ключ: жёстко ограничен фиксированным набором (комнаты/пользователи/календарь), **записи недоступны в принципе** — см. `docs/api-reference.md`. Доменный ключ: доступ по выданным scope |
+| Срок жизни | ~30 дней, потом токен надо переизвлечь | До года, задаётся при выпуске |
+| Откуда взять | DevTools в браузере, см. ниже | Аватар → «Настройки» → «API ключи» (личный) или «Управление» → «API-ключи» (доменный, выдаёт админ) |
+
+Режим выбирается автоматически: если задан `KTALK_SESSION_TOKEN` — `session`,
+иначе `api_key`. Можно закрепить явно через `KTALK_AUTH_MODE`.
+
+Мы пришли к `session` эмпирически: личный API-ключ в нашем пространстве
+не даёт доступа ни к одному эндпоинту записей (403 на всех вариантах —
+см. `scripts/probe_scopes.py`), а session-токен — это тот же механизм,
+которым пользуется сам веб-клиент Толка, поэтому он видит ровно то, что
+видит залогиненный пользователь.
 
 ## Инструменты
 
-| Инструмент | Эндпоинт | Назначение |
+| Инструмент | session | api_key |
 |---|---|---|
-| `get_recording` | `GET /api/Recordings/{key}` | Детали записи |
-| `get_transcript` | `GET /api/recordings/{key}/transcript` | Транскрипт по спикерам |
-| `get_summary` | `GET /api/recordings/v2/{key}/summary` или `/summary/{type}` | Краткий пересказ / протокол |
-| `download_recording` | `GET /api/Recordings/{key}/file/{quality}` | Скачать видеофайл |
-| `list_recordings` | `GET /api/Domain/recordings/v2` | Список записей пространства (нужен **доменный** ключ, не личный) |
-| `auth_status` | — | Проверить, что ключ вообще принимается |
-
-**Важно про личный API-ключ:** по документации Толка личный ключ даёт доступ
-только к тем данным, которые видит сам пользователь. `list_recordings` при
-этом почти наверняка вернёт 403 — доменный листинг требует ключ,
-выпущенный администратором пространства со scope "Просмотр списка записей".
-Если у вас только личный ключ, `recording_key` придётся брать из самого Толка
-(ссылка на запись) и передавать в `get_recording` / `get_transcript` /
-`get_summary` напрямую.
-
-Это не проверено вживую — сначала вызовите `auth_status`, а затем один из
-read-инструментов с реальным `recording_key` и посмотрите на ответ.
+| `list_recordings` | `GET /api/recordings` — ваши записи | `GET /api/Domain/recordings/v2` — записи всего пространства, нужен доменный ключ |
+| `get_recording` | `GET /api/recordings/{key}` | `GET /api/Domain/recordings/{key}` |
+| `get_transcript` | `GET /api/recordings/{key}/transcript` (один путь для обоих режимов) | |
+| `get_summary` | `GET /api/recordings/v2/{key}/summary` или `/summary/{type}` (один путь для обоих режимов) | |
+| `download_recording` | скачивает лучшее качество из `qualities[]` детали записи | `GET /api/Recordings/{key}/file/{quality}`, `quality` обязателен |
+| `list_meetings` / `get_meeting` / `get_chat_messages` | `GET /api/conferencesHistory/...` — рабочий путь только подтверждён для session | не проверено, вероятно 403 |
+| `auth_status` | проверка credential без побочных эффектов | |
 
 ## Установка
 
@@ -48,12 +48,17 @@ uv sync
 copy .env.example .env
 ```
 
-Откройте `.env` и заполните сами (в чат ключ вставлять не нужно):
+Откройте `.env` и заполните сами (значения в чат присылать не нужно):
 
 - `KTALK_SPACE_URL` — адрес вашего пространства, например `https://mycompany.ktalk.ru`.
-- `KTALK_API_KEY` — API-ключ. Личный: аватар → «Настройки» → «API ключи» →
-  «Выпустить ключ». Доменный (если нужен `list_recordings`): «Управление» →
-  «API-ключи» → «Добавить» — этот делает администратор пространства.
+- **Session-режим (рекомендуется):** `KTALK_SESSION_TOKEN`. На вкладке, где вы
+  залогинены в свой Толк, откройте DevTools (F12) → Console и выполните:
+  ```js
+  copy(JSON.parse(localStorage.session).data.token)
+  ```
+  Вставьте скопированное значение в `KTALK_SESSION_TOKEN`. Токен живёт
+  примерно 30 дней — когда инструменты начнут возвращать 401, повторите шаг.
+- **API-key режим:** `KTALK_API_KEY`, оставьте `KTALK_SESSION_TOKEN` пустым.
 
 ## Проверка
 
@@ -61,10 +66,17 @@ copy .env.example .env
 uv run ktalk-mcp-apikey
 ```
 
-Сервер запустится на stdio (это нормально — он ждёт MCP-клиента, а не
-печатает лог и не завершается). Для быстрой проверки ключа без Claude можно
-временно добавить в `server.py` ручной вызов `auth_status()`, либо
-подключить сервер к Claude Code (см. ниже) и вызвать `auth_status` оттуда.
+Сервер запустится на stdio и будет ждать MCP-клиента. Для ручной проверки
+без полноценного MCP-клиента:
+
+```bash
+uv run python -c "
+from dotenv import load_dotenv; load_dotenv()
+import asyncio
+from ktalk_mcp_apikey.server import auth_status
+print(asyncio.run(auth_status()))
+"
+```
 
 ## Подключение к Claude Code
 
@@ -72,15 +84,19 @@ uv run ktalk-mcp-apikey
 copy .mcp.json.example .mcp.json
 ```
 
-Впишите свои `KTALK_SPACE_URL` и `KTALK_API_KEY` в `.mcp.json` (файл в
-`.gitignore` не входит — не коммитьте его с реальным ключом) либо, лучше,
-оставьте `env` пустым и полагайтесь на `.env` — тогда добавьте загрузку
-`.env` в `server.py` через `python-dotenv`, если понадобится.
+`.mcp.json` в `.gitignore` — не коммитьте его. Сервер сам подхватывает
+`.env` (через `python-dotenv`), так что `env` в `.mcp.json` можно оставить
+пустым, если `.env` уже настроен.
 
 ## Структура
 
 ```
 src/ktalk_mcp_apikey/
-  client.py   — HTTP-клиент: base_url, заголовок X-Auth-Token, GET/download
+  client.py   — HTTP-клиент: base_url, оба режима авторизации, GET/download
   server.py   — FastMCP-сервер и сами инструменты
+scripts/
+  probe_scopes.py   — read-only сканер scope API-ключа по всей OpenAPI-спеке
+docs/
+  api-reference.md            — читаемая сводка всех 111 операций спеки
+  talk.public.api-api-2.json  — официальная OpenAPI-спека Толка
 ```
