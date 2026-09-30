@@ -52,16 +52,49 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # keep stdout clean -- token/origin never get logged
 
+    def _cors_headers(self, origin_ok: bool):
+        # Only echo the origin back (enabling the page's fetch() to read the
+        # response body) once it's been validated against SPACE_URL -- never
+        # a wildcard, and never for a rejected origin.
+        if origin_ok:
+            self.send_header("Access-Control-Allow-Origin", SPACE_URL)
+            self.send_header("Vary", "Origin")
+
+    def _json(self, status: int, payload: dict, origin_ok: bool = False):
+        body = json.dumps(payload).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self._cors_headers(origin_ok)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        # This endpoint only accepts the bookmarklet's POST -- a plain GET
+        # (e.g. opening the URL directly in a browser) lands here instead of
+        # the confusing stock "501 Unsupported method" page.
+        self._json(200, {"ok": True, "message": "Waiting for a POST from the bookmarklet, not a page visit."})
+
+    def do_OPTIONS(self):
+        # Defensive: text/plain keeps the bookmarklet's fetch a CORS "simple
+        # request" (no preflight), but handle OPTIONS anyway in case a
+        # browser still sends one.
+        origin = self.headers.get("Origin", "")
+        origin_ok = bool(SPACE_URL) and origin.rstrip("/") == SPACE_URL
+        self.send_response(204)
+        self._cors_headers(origin_ok)
+        if origin_ok:
+            self.send_header("Access-Control-Allow-Methods", "POST")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
     def do_POST(self):
         if self.path != "/ktalk-token":
-            self.send_response(404)
-            self.end_headers()
+            self._json(404, {"ok": False, "message": "not found"})
             return
         origin = self.headers.get("Origin", "")
-        if not SPACE_URL or origin.rstrip("/") != SPACE_URL:
-            self.send_response(403)
-            self.end_headers()
-            self.wfile.write(json.dumps({"ok": False, "message": "forbidden_origin"}).encode())
+        origin_ok = bool(SPACE_URL) and origin.rstrip("/") == SPACE_URL
+        if not origin_ok:
+            self._json(403, {"ok": False, "message": "forbidden_origin"})
             print(f"Rejected POST from origin {origin!r} (expected {SPACE_URL!r})")
             return
         length = int(self.headers.get("Content-Length", 0))
@@ -73,15 +106,10 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, AttributeError):
             token, expires_at = "", None
         if not token:
-            self.send_response(400)
-            self.end_headers()
-            self.wfile.write(json.dumps({"ok": False, "message": "no token in body"}).encode())
+            self._json(400, {"ok": False, "message": "no token in body"}, origin_ok=True)
             return
         write_token(token)
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(json.dumps({"ok": True, "expiresAt": expires_at, "path": ENV_PATH}).encode())
+        self._json(200, {"ok": True, "expiresAt": expires_at, "path": ENV_PATH}, origin_ok=True)
         print(f"Token saved to {ENV_PATH}" + (f" (expires {expires_at})" if expires_at else ""))
         self.server.done = True
 
