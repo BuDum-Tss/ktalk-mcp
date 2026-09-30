@@ -19,8 +19,11 @@ load_dotenv()
 from ktalk_mcp_apikey.client import client_from_env  # noqa: E402
 
 FAKE = "00000000-0000-0000-0000-000000000000"
-KNOWN_ROOM = os.environ.get("PROBE_ROOM_NAME", "aith-run-257")
-KNOWN_CONF = os.environ.get("PROBE_CONFERENCE_KEY", "A6oq1CfPcLYTeEnNieTP")
+# No real defaults on purpose -- set these yourself (a room you moderate /
+# any conference id) via env if you want the probe to distinguish "no such
+# resource" (404) from "no scope" (403) instead of just getting 404 on both.
+KNOWN_ROOM = os.environ.get("PROBE_ROOM_NAME", FAKE)
+KNOWN_CONF = os.environ.get("PROBE_CONFERENCE_KEY", FAKE)
 
 PATH_PARAM_VALUES = {
     "roomName": KNOWN_ROOM,
