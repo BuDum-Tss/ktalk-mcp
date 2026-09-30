@@ -38,7 +38,8 @@ MCP-сервер для Контур.Толк (ktalk.ru): записи, тран
 Требуется Python 3.12+ и [uv](https://docs.astral.sh/uv/).
 
 ```bash
-cd C:\MyProjects\ktalk-mcp
+git clone https://github.com/BuDum-Tss/ktalk-mcp.git
+cd ktalk-mcp
 uv sync
 ```
 
@@ -118,6 +119,30 @@ copy .mcp.json.example .mcp.json
 `.env` (через `python-dotenv`), так что `env` в `.mcp.json` можно оставить
 пустым, если `.env` уже настроен.
 
+## Подключение к Claude Desktop
+
+Это локальный (stdio) MCP-сервер — у него нет URL, подключение идёт через
+`claude_desktop_config.json`. Claude Desktop сам запускает процесс при
+старте приложения, вручную ничего держать открытым не нужно.
+
+Путь к файлу: `%APPDATA%\Claude\claude_desktop_config.json` (Windows) /
+`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS).
+Добавьте в `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "ktalk": {
+      "command": "uv",
+      "args": ["run", "--project", "C:/MyProjects/ktalk-mcp", "ktalk-mcp-apikey"]
+    }
+  }
+}
+```
+
+Переменные окружения не нужны в самом конфиге — сервер сам читает `.env` из
+корня проекта. Перезапустите Claude Desktop, чтобы коннектор появился.
+
 ## Структура
 
 ```
@@ -125,7 +150,8 @@ src/ktalk_mcp_apikey/
   client.py   — HTTP-клиент: base_url, оба режима авторизации, GET/download
   server.py   — FastMCP-сервер и сами инструменты
 scripts/
-  probe_scopes.py   — read-only сканер scope API-ключа по всей OpenAPI-спеке
+  probe_scopes.py     — read-only сканер scope API-ключа по всей OpenAPI-спеке
+  token_receiver.py   — локальный приёмник для букмарклета/Claude in Chrome (см. выше)
 docs/
   api-reference.md            — читаемая сводка всех 111 операций спеки
   talk.public.api-api-2.json  — официальная OpenAPI-спека Толка

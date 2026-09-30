@@ -2,11 +2,7 @@
   "mcpServers": {
     "ktalk": {
       "command": "uv",
-      "args": ["run", "--project", "C:/MyProjects/ktalk-mcp", "ktalk-mcp-apikey"],
-      "env": {
-        "KTALK_SPACE_URL": "https://your-space.ktalk.ru",
-        "KTALK_API_KEY": "put-your-key-here-or-better-use-env-file"
-      }
+      "args": ["run", "--project", "C:/MyProjects/ktalk-mcp", "ktalk-mcp-apikey"]
     }
   }
 }
