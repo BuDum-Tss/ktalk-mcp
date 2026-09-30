@@ -1,0 +1,19 @@
+[project]
+name = "ktalk-mcp-apikey"
+version = "0.1.0"
+description = "MCP server for Kontur Talk (ktalk.ru) recordings, transcripts and summaries, authenticated with a personal API key (X-Auth-Token)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+ktalk-mcp-apikey = "ktalk_mcp_apikey.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ktalk_mcp_apikey"]
