@@ -51,13 +51,35 @@ copy .env.example .env
 Откройте `.env` и заполните сами (значения в чат присылать не нужно):
 
 - `KTALK_SPACE_URL` — адрес вашего пространства, например `https://mycompany.ktalk.ru`.
-- **Session-режим (рекомендуется):** `KTALK_SESSION_TOKEN`. На вкладке, где вы
-  залогинены в свой Толк, откройте DevTools (F12) → Console и выполните:
+- **Session-режим (рекомендуется):** `KTALK_SESSION_TOKEN`. Токен живёт
+  примерно 30 дней — когда инструменты начнут возвращать 401, обновите его.
+  Два способа получить/обновить:
+
+  **Букмарклет (один клик, рекомендуется).** Букмарклет — это закладка
+  браузера с зашитым JS-кодом вместо ссылки: клик по ней выполняет этот код
+  прямо на открытой странице. Настройка один раз:
+
+  1. Запустите приёмник: `uv run python scripts/token_receiver.py`
+     (слушает `localhost:8765`, ждёт ровно один валидный токен и завершается).
+  2. Добавьте новую закладку в браузере с этим содержимым в поле URL:
+     ```js
+     javascript:(async()=>{try{const s=JSON.parse(localStorage.session||"{}"),d=s.data||{};let t=d.token,e=d.expiresAt||null;try{if(d.idToken){const r=await fetch("/api/authorize/session",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({idToken:d.idToken})});if(r.ok){const j=await r.json();if(j&&j.token){t=j.token;e=j.expiresAt||e}}}}catch(_){}if(!t){alert("Толк: токен не найден — залогинься и повтори.");return}const p=await fetch("http://127.0.0.1:8765/ktalk-token",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:t,expiresAt:e})});const o=await p.json().catch(()=>({}));if(p.ok&&o.ok){alert("Токен сохранён"+(o.expiresAt?", годен до "+o.expiresAt:""))}else{alert("Не удалось сохранить: "+(o.message||p.status))}}catch(x){alert("Ошибка: "+x)}})();
+     ```
+     (Chrome иногда обрезает `javascript:` при вставке — если так, откройте
+     закладку на редактирование и вставьте текст ещё раз.)
+  3. На вкладке своего пространства Толка (залогинены) кликните закладку —
+     появится alert «Токен сохранён», приёмник запишет значение в `.env` и
+     завершится сам.
+
+  Когда токен протухнет — снова `uv run python scripts/token_receiver.py`,
+  снова клик по той же закладке.
+
+  **Вручную, через DevTools** — если не хочется настраивать закладку:
+  F12 → Console →
   ```js
   copy(JSON.parse(localStorage.session).data.token)
   ```
-  Вставьте скопированное значение в `KTALK_SESSION_TOKEN`. Токен живёт
-  примерно 30 дней — когда инструменты начнут возвращать 401, повторите шаг.
+  и вставить скопированное значение в `KTALK_SESSION_TOKEN` самостоятельно.
 - **API-key режим:** `KTALK_API_KEY`, оставьте `KTALK_SESSION_TOKEN` пустым.
 
 ## Проверка
